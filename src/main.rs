@@ -1,37 +1,36 @@
 use serde::{Deserialize, Serialize};
 
-pub mod graph;
 pub mod node;
+pub mod graph;
+pub mod graph_ui;
+pub mod sample;
 
 #[derive(Default, Deserialize, Serialize)]
-pub struct QuadioApp;
+pub struct QuadioApp {
+    graph: graph::NodeGraph<Box<dyn node::QuadioNode>>
+}
 
 impl QuadioApp {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
-
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Default::default()
     }
 }
 
 
 impl eframe::App for QuadioApp {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
+
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::right("side_panel").show(ctx, |ui| {
             ui.heading("quadio");
             egui::warn_if_debug_build(ui);
+            ui.monospace("1ch 44100Hz, not oversampling, audio thread DOWN");
+            ui.monospace("0 voices");
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("hello");
+            graph_ui::graph_ui(ui, "main_graph", &mut self.graph);
         });
     }
 }
@@ -43,7 +42,7 @@ fn main() -> eframe::Result<()> {
 
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "eframe template",
+        "quadio",
         native_options,
         Box::new(|cc| Box::new(QuadioApp::new(cc))),
     )
