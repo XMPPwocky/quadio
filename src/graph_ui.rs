@@ -10,18 +10,18 @@ use std::sync::Mutex;
 #[derive(PartialEq, Eq)]
 enum Selection {
     Node(NodeKey),
-    Socket(NodeKey, SocketDirection, usize)
+    Socket(NodeKey, SocketDirection, usize),
 }
 
 enum ConnectionEvent {
     Connect((NodeKey, usize), (NodeKey, usize)),
-    Disconnect(NodeKey, SocketDirection, usize)
+    Disconnect(NodeKey, SocketDirection, usize),
 }
 
 #[derive(Default)]
 struct GraphMemory {
     selection: Option<Selection>,
-    socket_positions: HashMap<(NodeKey, SocketDirection, usize), egui::Pos2>
+    socket_positions: HashMap<(NodeKey, SocketDirection, usize), egui::Pos2>,
 }
 impl GraphMemory {
     fn is_node_selected(&self, node: NodeKey) -> bool {
@@ -29,34 +29,49 @@ impl GraphMemory {
             None => false,
             Some(Selection::Node(sel_node)) if sel_node == node => true,
             Some(Selection::Socket(sel_node, _, _)) if sel_node == node => true,
-            _ => false
+            _ => false,
         }
     }
 }
-
 
 type NodeConstructors = [(&'static str, &'static dyn Fn() -> Box<dyn QuadioNode>)];
 
 #[allow(clippy::box_default)]
 fn node_constructors() -> &'static NodeConstructors {
     &[
-        ("Output", &|| Box::new(crate::node::OutputNode::default()) as _),
-
-        ("Passthru", &|| Box::new(crate::node::PassthruNode::default()) as _),
+        ("Output", &|| {
+            Box::new(crate::node::OutputNode::default()) as _
+        }),
+        ("Passthru", &|| {
+            Box::new(crate::node::PassthruNode::default()) as _
+        }),
         ("Sum", &|| Box::new(crate::node::SumNode::default()) as _),
-
-        ("Phasor", &|| Box::new(crate::node::PhasorNode::default()) as _),
-
-
+        ("Product", &|| {
+            Box::new(crate::node::ProductNode::default()) as _
+        }),
+        ("Linear", &|| {
+            Box::new(crate::node::LinearNode::default()) as _
+        }),
+        ("Phase Scale", &|| {
+            Box::new(crate::node::PhaseScaleNode::default()) as _
+        }),
+        ("Mag-Ang Switch", &|| {
+            Box::new(crate::node::MagAngSwitchNode::default()) as _
+        }),
+        ("Phasor", &|| {
+            Box::new(crate::node::PhasorNode::default()) as _
+        }),
     ]
 }
 
 pub fn graph_ui<I>(
     ui: &mut egui::Ui,
     id_source: I,
-    graph: &mut NodeGraph<Box<dyn QuadioNode>>
-) -> egui::Response 
-where I: std::hash::Hash {
+    graph: &mut NodeGraph<Box<dyn QuadioNode>>,
+) -> egui::Response
+where
+    I: std::hash::Hash,
+{
     ui.push_id(id_source, |ui| {
         let memory = ui.memory_mut(|mem| {
             mem.data.get_temp_mut_or_default::<Arc<Mutex<GraphMemory>>>(ui.id()).clone()
@@ -88,7 +103,6 @@ where I: std::hash::Hash {
                         shadow: egui::epaint::Shadow::NONE,
                         ..egui::Frame::window(ui.style())
                     }
-                    
                 } else {
                     egui::Frame {
                         fill: ui.style().visuals.selection.bg_fill,
@@ -118,7 +132,6 @@ where I: std::hash::Hash {
                                         memory.socket_positions.insert(
                                             (node_key, SocketDirection::Input, i),
                                             socket_pos);
-                                        
                                         let r = ui.button(format!("> {in_label}"));
                                         if r.clicked() {
                                             if let Some(Selection::Socket(other_node, SocketDirection::Output, other_node_sock_idx)) = memory.selection {
@@ -144,7 +157,7 @@ where I: std::hash::Hash {
                                             memory.socket_positions.insert(
                                                 (node_key, SocketDirection::Output, i),
                                                 socket_pos); // should be offset to be on the frame...
-                                                
+
                                             let out_label = &out_desc.label;
                                             let r = ui.button(format!("{out_label} >"));
                                             if r.clicked() {
@@ -159,7 +172,7 @@ where I: std::hash::Hash {
                                             }
                                         } else {
                                             ui.label("");
-                                        }    
+                                        }
                                     });
 
                                     ui.end_row();
