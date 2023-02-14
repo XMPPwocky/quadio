@@ -240,8 +240,7 @@ impl AudioEngine {
                 self.buffers[node].0 = DfsState::Visited;
             }
             DfsState::Visiting => {
-                // cycle!
-                unimplemented!()
+                eprintln!("cycle... uh...oh...");
             }
             DfsState::Visited => {
                 // nop!

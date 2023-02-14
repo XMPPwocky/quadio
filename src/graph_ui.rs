@@ -52,8 +52,14 @@ fn node_constructors() -> &'static NodeConstructors {
         ("Linear", &|| {
             Box::new(crate::node::LinearNode::default()) as _
         }),
+        ("Quadrant", &|| {
+            Box::new(crate::node::QuadrantNode::default()) as _
+        }),
         ("Phase Scale", &|| {
             Box::new(crate::node::PhaseScaleNode::default()) as _
+        }),
+        ("Re-Im Split", &|| {
+            Box::new(crate::node::ReImSplitNode::default()) as _
         }),
         ("Mag-Ang Switch", &|| {
             Box::new(crate::node::MagAngSwitchNode::default()) as _
