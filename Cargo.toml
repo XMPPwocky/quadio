@@ -10,6 +10,8 @@ anyhow = "1.0.69"
 cpal = "0.15.0"
 eframe = { version = "0.21.0", features = [ "dark-light"] }
 egui = "0.21.0"
+egui_extras = { version = "0.21.0", features = ["image"] }
+image = { version = "0.24.5", features = ["png"] }
 num-complex = "0.4.3"
 ringbuf = "0.3.2"
 serde = "1.0.152"

@@ -39,8 +39,8 @@ type NodeConstructors = [(&'static str, &'static dyn Fn() -> Box<dyn QuadioNode>
 #[allow(clippy::box_default)]
 fn node_constructors() -> &'static NodeConstructors {
     &[
-        ("Output", &|| {
-            Box::new(crate::node::OutputNode::default()) as _
+        ("Phasor", &|| {
+            Box::new(crate::node::PhasorNode::default()) as _
         }),
         ("Passthru", &|| {
             Box::new(crate::node::PassthruNode::default()) as _
@@ -64,8 +64,20 @@ fn node_constructors() -> &'static NodeConstructors {
         ("Mag-Ang Switch", &|| {
             Box::new(crate::node::MagAngSwitchNode::default()) as _
         }),
-        ("Phasor", &|| {
-            Box::new(crate::node::PhasorNode::default()) as _
+        ("Quantize", &|| {
+            Box::new(crate::node::QuantizeNode::default()) as _
+        }),
+        ("Slo-Mo", &|| {
+            Box::new(crate::node::SlomoNode::default()) as _
+        }),
+
+        ("Scope", &|| {
+            Box::new(crate::node::ScopeNode::default()) as _
+        }),
+
+
+        ("Output", &|| {
+            Box::new(crate::node::OutputNode::default()) as _
         }),
     ]
 }
@@ -210,8 +222,7 @@ where
             let Some(&dst_pos) = memory.socket_positions.get(&(dst.0, SocketDirection::Output, dst.1)) else {
                 continue;
             };
-            let stroke = egui::Stroke::new(2.0, egui::Color32::RED);
-
+            let stroke = egui::Stroke::new(2.0, egui::Color32::from_rgb(0x00, 0xD3, 0xED));
 
             let horiz = src_pos.x < dst_pos.x;
             let points = if horiz {
