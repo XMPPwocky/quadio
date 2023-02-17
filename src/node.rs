@@ -45,23 +45,7 @@ impl QuadioNode for PassthruNode {
     }
 }
 
-impl<'de> Deserialize<'de> for Box<dyn QuadioNode> {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        unimplemented!()
-    }
-}
-impl Serialize for Box<dyn QuadioNode> {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        unimplemented!()
-    }
-}
-
+/*
 #[derive(Default)]
 pub struct SumNode;
 impl graph::Node for SumNode {
@@ -488,7 +472,7 @@ impl QuadioNode for ScopeNode {
     }
 }
 
-
+*/
 
 #[derive(Default)]
 pub struct OutputNode;
@@ -512,6 +496,8 @@ impl QuadioNode for OutputNode {
         // nop, this one's magic
     }
 }
+
+/*
 
 pub struct PhasorNode {
     f_mul: f32,
@@ -585,3 +571,4 @@ impl QuadioNode for PhasorNode {
         }
     }
 }
+*/
