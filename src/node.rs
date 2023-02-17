@@ -522,6 +522,8 @@ pub struct PhasorNode {
     mod_ang_scale: f32,
 
     phase: f32,
+
+    last_mod_phase: f32,
 }
 impl Default for PhasorNode {
     fn default() -> Self {
@@ -531,6 +533,8 @@ impl Default for PhasorNode {
             mod_mag_scale: 0.0,
             mod_ang_scale: 0.1,
             phase: 0.0,
+
+            last_mod_phase: 0.0,
         }
     }
 }
@@ -564,21 +568,21 @@ impl QuadioNode for PhasorNode {
         for (mod_in, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let (_mod_mag, mod_ang) = mod_in.to_polar();
 
-            let mod_ang = crate::math::clean_angle_radians(mod_ang);
-
-            // triangle fold
-            let mod_ang = mod_ang;
+            let est_mod_freq = crate::math::clean_angle_radians(mod_ang - self.last_mod_phase);
 
             let mod_f_scale = 0.02 * (mod_in.re * self.mod_mag_scale);
 
-            self.phase += mod_f_scale;
-            self.phase += 0.02 * self.f_mul / self.f_div;
+            self.phase += 0.02 * self.f_mul / self.f_div; // main accumulator
+            self.phase += est_mod_freq * self.mod_ang_scale; // PM (previously differentiated)
+            self.phase += mod_f_scale; // FM
             self.phase %= TAU;
 
             *out = QuadioSample::from_polar(
                 1.0,
-                self.phase + crate::math::clean_angle_radians(self.mod_ang_scale * mod_ang).abs()
+                self.phase
             );
+
+            self.last_mod_phase = mod_ang;
         }
     }
 }
