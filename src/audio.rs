@@ -26,22 +26,26 @@ enum DfsState {
     Visiting,
     Visited,
 }
+
+pub struct AudioContext {
+    pub sample_rate: f32
+}
 pub struct AudioEngine {
     buffers: slotmap::SecondaryMap<NodeKey, (DfsState, Vec<Vec<QuadioSample>>)>,
     zeroes_buf: Vec<QuadioSample>,
 
-    sample_rate: f32,
-    channels: usize,
     block_size: usize,
+    ctx: AudioContext
 }
 impl AudioEngine {
-    pub fn new(sample_rate: f32, channels: usize) -> AudioEngine {
+    pub fn new(sample_rate: f32, _channels: usize) -> AudioEngine {
         AudioEngine {
             buffers: slotmap::SecondaryMap::new(),
             zeroes_buf: Vec::with_capacity(1024),
             block_size: 1024,
-            sample_rate,
-            channels,
+            ctx: AudioContext {
+                sample_rate
+            }
         }
     }
 }
@@ -209,10 +213,10 @@ impl AudioEngine {
 
                 let mut inputs_ind: Vec<_> = std::iter::repeat(None).take(num_inputs).collect();
 
-                for i in 0..num_inputs {
+                for (i, input) in inputs_ind.iter_mut().enumerate() {
                     if let Some((src_node, src_idx)) = graph.src_for_dest(node, i) {
                         self.run_graph_node(graph, src_node);
-                        inputs_ind[i] = Some((src_node, src_idx));
+                        *input = Some((src_node, src_idx));
                     }
                 }
 
@@ -232,7 +236,7 @@ impl AudioEngine {
                     .collect();
                 let mut outputs: Vec<_> = outputs_all.chunks_mut(self.block_size).collect();
 
-                graph.get_node_mut(node).process(&inputs, &mut outputs);
+                graph.get_node_mut(node).process(&self.ctx, &inputs, &mut outputs);
 
                 for (i, output_tmp) in outputs.into_iter().enumerate() {
                     self.buffers[node].1[i].copy_from_slice(output_tmp)

@@ -1,18 +1,17 @@
-use core::f32::consts::{TAU, PI};
+use core::f32::consts::TAU;
 use core::ops::RangeInclusive;
-
-use std::collections::VecDeque;
 use num_complex::Complex32;
 use serde::{Deserialize, Serialize};
 
+use crate::audio::AudioContext;
 use crate::graph::{self, NodeDescriptor, SocketDescriptor};
 
-use crate::sample::{QuadioSample, self};
+use crate::sample::QuadioSample;
 
 pub trait QuadioNode: graph::Node + Send + Sync + std::any::Any {
     fn show_ui(&mut self, ui: &mut egui::Ui);
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]);
+    fn process(&mut self, ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]);
 }
 impl graph::Node for Box<dyn QuadioNode> {
     fn get_descriptor(&self) -> graph::NodeDescriptor {
@@ -39,7 +38,7 @@ impl QuadioNode for PassthruNode {
         ui.label("PASSTHRU");
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             *out = *inp;
         }
@@ -87,7 +86,7 @@ impl QuadioNode for SumNode {
         ui.label("SUM");
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for ((a, b), out) in inputs[0]
             .iter()
             .zip(inputs[1].iter())
@@ -122,7 +121,7 @@ impl QuadioNode for ProductNode {
         ui.label("PRODUCT");
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for ((a, b), out) in inputs[0]
             .iter()
             .zip(inputs[1].iter())
@@ -174,7 +173,7 @@ impl QuadioNode for LinearNode {
         edit_complex(ui, "b", &mut self.b, 0.0..=1024., true);
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (x, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             *out = (self.m * *x) + self.b
         }
@@ -208,7 +207,7 @@ impl QuadioNode for PhaseScaleNode {
         );
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let (r, theta) = inp.to_polar();
             *out = Complex32::from_polar(r, theta * self.scale);
@@ -235,7 +234,7 @@ impl QuadioNode for MagAngSwitchNode {
         ui.label("MAG-ANG SWITCH");
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let (r, theta) = inp.to_polar();
             *out = Complex32::from_polar(theta / std::f32::consts::PI, r * std::f32::consts::PI);
@@ -266,7 +265,7 @@ impl QuadioNode for ReImSplitNode {
         ui.monospace("RE-IM SPLIT");
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         let (a, b) = outputs.split_at_mut(1);
         for (inp, (out_re, out_im)) in inputs[0].iter().zip(a[0].iter_mut().zip(b[0].iter_mut())) {
             *out_re = Complex32::new(inp.re, 0.0);
@@ -305,7 +304,7 @@ impl QuadioNode for QuadrantNode {
         edit_complex(ui, "IV", &mut self.scales[3], 0.0..=32.0, false);
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let scale = match (inp.re.is_sign_positive(), inp.im.is_sign_positive()) {
                 (true, true) => self.scales[0],
@@ -352,7 +351,7 @@ impl QuadioNode for QuantizeNode {
         self.phase_factor = 2.0f32.powf(phase_bits);
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let (amp, phase) = inp.to_polar();
             let amp = (amp * self.amp_factor).round() / self.amp_factor;
@@ -391,7 +390,7 @@ impl QuadioNode for SlomoNode {
         ui.add(egui::Slider::new(&mut self.alpha, 0.0..=1.0).logarithmic(true));
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let (amp, phase) = inp.to_polar();
             let phase = crate::math::lerp(self.last_phase, phase, 1.0 - self.alpha);
@@ -468,7 +467,7 @@ impl QuadioNode for ScopeNode {
             });
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for inp in inputs[0] {
             if (inp.im.is_sign_positive() && self.last_sample.im.is_sign_negative()) || self.free_run {
                 self.triggered = true;
@@ -509,7 +508,7 @@ impl QuadioNode for OutputNode {
         ui.heading("Out");
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, _inputs: &[&[QuadioSample]], _outputs: &mut [&mut [QuadioSample]]) {
         // nop, this one's magic
     }
 }
@@ -564,7 +563,7 @@ impl QuadioNode for PhasorNode {
         ui.add(egui::Slider::new(&mut self.mod_ang_scale, 0.0..=32.0).logarithmic(true));
     }
 
-    fn process(&mut self, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
+    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
         for (mod_in, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
             let (_mod_mag, mod_ang) = mod_in.to_polar();
 

@@ -1,7 +1,5 @@
 use std::f32::consts::{PI, TAU};
 
-use num_complex::Complex32;
-
 /// Make sure the angle `ang` is within +/- PI
 pub fn clean_angle_radians(ang: f32) -> f32 {
     // https://stackoverflow.com/questions/2320986/easy-way-to-keeping-angles-between-179-and-180-degrees
@@ -9,7 +7,7 @@ pub fn clean_angle_radians(ang: f32) -> f32 {
 
     let ang = ang % TAU;
     let ang = (ang + TAU) % TAU;
-    if (ang > PI) {
+    if ang > PI {
         ang - TAU
     } else {
         ang
