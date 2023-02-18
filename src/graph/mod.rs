@@ -4,31 +4,31 @@ use serde::{Deserialize, Serialize};
 use slotmap::new_key_type;
 
 mod node;
-pub use node::{Node, NodeDescriptor, SocketDescriptor};
+pub use node::{DynamicNode, ElementType, Node, NodeDescriptor, NodeIO, SocketDescriptor};
+
+use crate::node::QuadioNode;
+
+use crate::audio::AudioContext;
 
 new_key_type! {
     pub struct NodeKey;
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct NodeGraph<N: Node> {
-    nodes: slotmap::SlotMap<NodeKey, N>,
+pub type BoxedNode = Box<dyn QuadioNode>;
+
+//#[derive(Serialize, Deserialize)]
+
+#[derive(Default)]
+pub struct NodeGraph {
+    nodes: slotmap::SlotMap<NodeKey, BoxedNode>,
     descriptors: slotmap::secondary::SecondaryMap<NodeKey, NodeDescriptor>,
 
     // each input socket has only one thing connected
     // so we can use that :)
     wires_by_destination: HashMap<(NodeKey, usize), (NodeKey, usize)>,
 }
-impl<N: Node> Default for NodeGraph<N> {
-    fn default() -> Self {
-        NodeGraph {
-            nodes: Default::default(),
-            descriptors: Default::default(),
-            wires_by_destination: Default::default(),
-        }
-    }
-}
-impl<N: Node> NodeGraph<N> {
+
+impl NodeGraph {
     #[doc(hidden)]
     pub fn validate_wires(&self) {
         for (dst, src) in &self.wires_by_destination {
@@ -44,7 +44,7 @@ impl<N: Node> NodeGraph<N> {
         }
     }
 
-    pub fn add_node(&mut self, node: N) -> NodeKey {
+    pub fn add_node(&mut self, node: BoxedNode) -> NodeKey {
         // more convenient to do this now before we stick `node` into self.nodes
         let descriptor = node.get_descriptor();
 
@@ -56,7 +56,7 @@ impl<N: Node> NodeGraph<N> {
         key
     }
 
-    pub fn remove_node(&mut self, node_key: NodeKey) -> Option<N> {
+    pub fn remove_node(&mut self, node_key: NodeKey) -> Option<BoxedNode> {
         // remove any wires to or from this node's sockets
         self.wires_by_destination.retain(|dst, src| {
             // i.e. keep only those which are unrelated to the removed node
@@ -97,10 +97,12 @@ impl<N: Node> NodeGraph<N> {
     pub fn node_descriptor(&self, node: NodeKey) -> &NodeDescriptor {
         &self.descriptors[node]
     }
-    pub fn nodes(&self) -> impl Iterator<Item = (NodeKey, &N)> {
+    pub fn nodes(&self) -> impl Iterator<Item = (NodeKey, &BoxedNode)> {
         self.nodes.iter()
     }
-    pub fn nodes_mut(&mut self) -> impl Iterator<Item = (NodeKey, &mut N, &NodeDescriptor)> {
+    pub fn nodes_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (NodeKey, &mut BoxedNode, &NodeDescriptor)> {
         self.nodes
             .iter_mut()
             .map(|(k, v)| (k, v, &self.descriptors[k]))
@@ -115,7 +117,7 @@ impl<N: Node> NodeGraph<N> {
         self.wires_by_destination.get(&(node, idx)).copied()
     }
 
-    pub fn get_node_mut(&mut self, node: NodeKey) -> &mut N {
+    pub fn get_node_mut(&mut self, node: NodeKey) -> &mut BoxedNode {
         &mut self.nodes[node]
     }
 }

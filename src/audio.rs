@@ -1,8 +1,10 @@
 use anyhow;
+use core::any::Any;
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     FromSample, Sample, SizedSample,
 };
+use num_complex::Complex32;
 use std::any::TypeId;
 use std::sync::mpsc;
 
@@ -14,7 +16,7 @@ use crate::{
 
 use std::sync::{Arc, Mutex};
 
-type SharedGraph = Arc<Mutex<NodeGraph<Box<dyn QuadioNode>>>>;
+type SharedGraph = Arc<Mutex<NodeGraph>>;
 
 pub struct AudioIO {
     #[allow(dead_code)] // just keeping it alive
@@ -28,14 +30,14 @@ enum DfsState {
 }
 
 pub struct AudioContext {
-    pub sample_rate: f32
+    pub sample_rate: f32,
 }
 pub struct AudioEngine {
     buffers: slotmap::SecondaryMap<NodeKey, (DfsState, Vec<Vec<QuadioSample>>)>,
     zeroes_buf: Vec<QuadioSample>,
 
     block_size: usize,
-    ctx: AudioContext
+    ctx: AudioContext,
 }
 impl AudioEngine {
     pub fn new(sample_rate: f32, _channels: usize) -> AudioEngine {
@@ -43,9 +45,7 @@ impl AudioEngine {
             buffers: slotmap::SecondaryMap::new(),
             zeroes_buf: Vec::with_capacity(1024),
             block_size: 1024,
-            ctx: AudioContext {
-                sample_rate
-            }
+            ctx: AudioContext { sample_rate },
         }
     }
 }
@@ -147,7 +147,7 @@ where
 }
 
 impl AudioEngine {
-    fn run_graph(&mut self, graph: &mut NodeGraph<Box<dyn QuadioNode>>, output: &mut [f32]) {
+    fn run_graph(&mut self, graph: &mut NodeGraph, output: &mut [f32]) {
         self.block_size = output.len();
 
         self.zeroes_buf
@@ -201,7 +201,7 @@ impl AudioEngine {
         }
     }
 
-    fn run_graph_node(&mut self, graph: &mut NodeGraph<Box<dyn QuadioNode>>, node: NodeKey) {
+    fn run_graph_node(&mut self, graph: &mut NodeGraph, node: NodeKey) {
         let (state, _) = &mut self.buffers[node];
 
         match state {
@@ -220,26 +220,38 @@ impl AudioEngine {
                     }
                 }
 
-                let inputs: Vec<_> = inputs_ind
-                    .into_iter()
-                    .map(|x| {
-                        if let Some((n, i)) = x {
-                            &self.buffers[n].1[i]
-                        } else {
-                            &self.zeroes_buf
-                        }
-                        .as_slice()
-                    })
+                let mut outputs_all: Vec<Vec<QuadioSample>> = std::iter::repeat(
+                    std::iter::repeat(QuadioSample::from(0.0))
+                        .take(self.block_size)
+                        .collect(),
+                )
+                .take(num_outputs)
+                .collect();
+                let mut outputs: Vec<_> = outputs_all
+                    .iter_mut()
+                    .map(|op| op as &mut dyn Any)
                     .collect();
-                let mut outputs_all: Vec<QuadioSample> = std::iter::repeat(QuadioSample::from(0.0))
-                    .take(self.block_size * num_outputs)
-                    .collect();
-                let mut outputs: Vec<_> = outputs_all.chunks_mut(self.block_size).collect();
 
-                graph.get_node_mut(node).process(&self.ctx, &inputs, &mut outputs);
+                {
+                    let inputs: Vec<_> = inputs_ind
+                        .into_iter()
+                        .map(|x| {
+                            (if let Some((n, i)) = x {
+                                &self.buffers[n].1[i]
+                            } else {
+                                &self.zeroes_buf
+                            }) as &dyn Any
+                        })
+                        .collect();
+
+                    graph
+                        .get_node_mut(node)
+                        .run(&self.ctx, &inputs, &mut outputs);
+                }
 
                 for (i, output_tmp) in outputs.into_iter().enumerate() {
-                    self.buffers[node].1[i].copy_from_slice(output_tmp)
+                    self.buffers[node].1[i]
+                        .copy_from_slice(output_tmp.downcast_mut::<Vec<Complex32>>().unwrap());
                 }
                 self.buffers[node].0 = DfsState::Visited;
             }

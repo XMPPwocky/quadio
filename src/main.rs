@@ -9,25 +9,22 @@ pub mod sample;
 use std::sync::{Arc, Mutex};
 
 pub struct QuadioApp {
-    graph: Arc<Mutex<graph::NodeGraph<Box<dyn node::QuadioNode>>>>,
+    graph: Arc<Mutex<graph::NodeGraph>>,
     ui_disabled: bool,
-    peeper: egui_extras::RetainedImage
+    peeper: egui_extras::RetainedImage,
 }
 
 impl QuadioApp {
     /// Called once before the first frame.
-    pub fn new(
-        _cc: &eframe::CreationContext<'_>,
-        graph: Arc<Mutex<graph::NodeGraph<Box<dyn node::QuadioNode>>>>,
-    ) -> Self {
-        let peeper = egui_extras::RetainedImage::from_image_bytes(
-            "peeper", include_bytes!("peeper.png"))
-            .unwrap();
-        
+    pub fn new(_cc: &eframe::CreationContext<'_>, graph: Arc<Mutex<graph::NodeGraph>>) -> Self {
+        let peeper =
+            egui_extras::RetainedImage::from_image_bytes("peeper", include_bytes!("peeper.png"))
+                .unwrap();
+
         QuadioApp {
             graph,
             ui_disabled: false,
-            peeper
+            peeper,
         }
     }
 }
@@ -49,8 +46,7 @@ impl eframe::App for QuadioApp {
         };
         frame.inner_margin.bottom = 0.0;
 
-        egui::CentralPanel::default().frame(frame)
-            .show(ctx, |ui| {
+        egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
             if self.ui_disabled {
                 return;
             }
@@ -70,7 +66,7 @@ fn main() -> eframe::Result<()> {
     // Log to stdout (if you run with `RUST_LOG=debug`).
     tracing_subscriber::fmt::init();
 
-    let graph: Arc<Mutex<graph::NodeGraph<Box<dyn node::QuadioNode>>>> = Default::default();
+    let graph: Arc<Mutex<graph::NodeGraph>> = Default::default();
     let _audio_stream = audio::audio_main(graph.clone()).unwrap();
 
     let native_options = eframe::NativeOptions::default();

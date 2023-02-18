@@ -45,48 +45,13 @@ fn node_constructors() -> &'static NodeConstructors {
         ("Passthru", &|| {
             Box::new(crate::node::PassthruNode::default()) as _
         }),
-        ("Sum", &|| Box::new(crate::node::SumNode::default()) as _),
-        ("Product", &|| {
-            Box::new(crate::node::ProductNode::default()) as _
-        }),
-        ("Linear", &|| {
-            Box::new(crate::node::LinearNode::default()) as _
-        }),
-        ("Quadrant", &|| {
-            Box::new(crate::node::QuadrantNode::default()) as _
-        }),
-        ("Phase Scale", &|| {
-            Box::new(crate::node::PhaseScaleNode::default()) as _
-        }),
-        ("Re-Im Split", &|| {
-            Box::new(crate::node::ReImSplitNode::default()) as _
-        }),
-        ("Mag-Ang Switch", &|| {
-            Box::new(crate::node::MagAngSwitchNode::default()) as _
-        }),
-        ("Quantize", &|| {
-            Box::new(crate::node::QuantizeNode::default()) as _
-        }),
-        ("Slo-Mo", &|| {
-            Box::new(crate::node::SlomoNode::default()) as _
-        }),
-
-        ("Scope", &|| {
-            Box::new(crate::node::ScopeNode::default()) as _
-        }),
-
-
         ("Output", &|| {
             Box::new(crate::node::OutputNode::default()) as _
         }),
     ]
 }
 
-pub fn graph_ui<I>(
-    ui: &mut egui::Ui,
-    id_source: I,
-    graph: &mut NodeGraph<Box<dyn QuadioNode>>,
-) -> egui::Response
+pub fn graph_ui<I>(ui: &mut egui::Ui, id_source: I, graph: &mut NodeGraph) -> egui::Response
 where
     I: std::hash::Hash,
 {

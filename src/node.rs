@@ -1,47 +1,56 @@
 use core::f32::consts::TAU;
-use core::ops::RangeInclusive;
+
 use num_complex::Complex32;
-use serde::{Deserialize, Serialize};
 
 use crate::audio::AudioContext;
-use crate::graph::{self, NodeDescriptor, SocketDescriptor};
-
+use crate::graph::{self, ElementType, NodeDescriptor, NodeIO, SocketDescriptor};
 use crate::sample::QuadioSample;
 
-pub trait QuadioNode: graph::Node + Send + Sync + std::any::Any {
+pub trait QuadioNode: graph::DynamicNode<AudioContext> + Send + Sync + std::any::Any {
     fn show_ui(&mut self, ui: &mut egui::Ui);
-
-    fn process(&mut self, ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]);
-}
-impl graph::Node for Box<dyn QuadioNode> {
-    fn get_descriptor(&self) -> graph::NodeDescriptor {
-        (**self).get_descriptor()
-    }
 }
 
-#[derive(Default)]
-pub struct PassthruNode;
-impl graph::Node for PassthruNode {
-    fn get_descriptor(&self) -> NodeDescriptor {
+pub struct BaseIO<'a> {
+    input: &'a [Complex32],
+    output: &'a mut [Complex32],
+}
+impl<'a> NodeIO<'a> for BaseIO<'a> {
+    fn get_descriptor() -> NodeDescriptor {
         NodeDescriptor {
             input_sockets: vec![SocketDescriptor {
                 label: "In".to_owned(),
+                element_type: ElementType::Complex,
             }],
             output_sockets: vec![SocketDescriptor {
                 label: "Out".to_owned(),
+                element_type: ElementType::Complex,
             }],
+        }
+    }
+
+    fn from_parts(
+        mut inputs: &'a [&dyn std::any::Any],
+        mut outputs: &'a mut [&mut dyn std::any::Any],
+    ) -> Self {
+        BaseIO {
+            input: &inputs[0].downcast_ref::<Vec<Complex32>>().unwrap()[..],
+            output: &mut outputs[0].downcast_mut::<Vec<Complex32>>().unwrap()[..],
+        }
+    }
+}
+#[derive(Default)]
+pub struct PassthruNode;
+impl graph::Node<AudioContext> for PassthruNode {
+    type Io<'a> = BaseIO<'a>;
+    fn run(&mut self, ctx: &AudioContext, io: BaseIO<'_>) {
+        for (inp, out) in io.input.iter().zip(io.output.iter_mut()) {
+            *out = *inp;
         }
     }
 }
 impl QuadioNode for PassthruNode {
     fn show_ui(&mut self, ui: &mut egui::Ui) {
         ui.label("PASSTHRU");
-    }
-
-    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
-        for (inp, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
-            *out = *inp;
-        }
     }
 }
 
@@ -329,7 +338,7 @@ impl QuadioNode for QuantizeNode {
         let mut amp_bits = self.amp_factor.log2();
         ui.add(egui::DragValue::new(&mut amp_bits).clamp_range(1.0..=16.0));
         self.amp_factor = 2.0f32.powf(amp_bits);
-        
+
         let mut phase_bits = self.phase_factor.log2();
         ui.add(egui::DragValue::new(&mut phase_bits).clamp_range(1.0..=16.0));
         self.phase_factor = 2.0f32.powf(phase_bits);
@@ -347,7 +356,7 @@ impl QuadioNode for QuantizeNode {
 
 pub struct SlomoNode {
     alpha: f32,
-    
+
     last_phase: f32,
 }
 impl Default for SlomoNode {
@@ -438,7 +447,7 @@ impl QuadioNode for ScopeNode {
             .map(|(i, sample)| (deepen(i), sample))
             .map(|(depth, sample)| [sample.re as f64 / depth, sample.im as f64 / depth])
             .collect();
-        
+
         let line = egui::plot::Line::new(points);
         egui::plot::Plot::new("plot").view_aspect(1.0)
             .width(256.0)
@@ -465,7 +474,7 @@ impl QuadioNode for ScopeNode {
                     self.capture_buf.clear();
                     self.triggered = false;
                 }
-            } 
+            }
         }
 
         outputs[0].copy_from_slice(inputs[0])
@@ -476,28 +485,15 @@ impl QuadioNode for ScopeNode {
 
 #[derive(Default)]
 pub struct OutputNode;
-impl graph::Node for OutputNode {
-    fn get_descriptor(&self) -> NodeDescriptor {
-        NodeDescriptor {
-            input_sockets: vec![SocketDescriptor {
-                label: "Out".to_owned(),
-            }],
-            output_sockets: vec![],
-        }
-    }
+impl graph::Node<AudioContext> for OutputNode {
+    type Io<'a> = BaseIO<'a>;
+    fn run<'io>(&mut self, ctx: &AudioContext, io: BaseIO<'io>) {}
 }
-
 impl QuadioNode for OutputNode {
     fn show_ui(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Out");
-    }
-
-    fn process(&mut self, _ctx: &AudioContext, _inputs: &[&[QuadioSample]], _outputs: &mut [&mut [QuadioSample]]) {
-        // nop, this one's magic
+        ui.label("OUT");
     }
 }
-
-/*
 
 pub struct PhasorNode {
     f_mul: f32,
@@ -523,15 +519,24 @@ impl Default for PhasorNode {
         }
     }
 }
-impl graph::Node for PhasorNode {
-    fn get_descriptor(&self) -> NodeDescriptor {
-        NodeDescriptor {
-            input_sockets: vec![SocketDescriptor {
-                label: "Mod".to_owned(),
-            }],
-            output_sockets: vec![SocketDescriptor {
-                label: "Out".to_owned(),
-            }],
+impl graph::Node<AudioContext> for PhasorNode {
+    type Io<'a> = BaseIO<'a>;
+    fn run<'io>(&mut self, ctx: &AudioContext, io: BaseIO<'io>) {
+        for (mod_in, out) in io.input.iter().zip(io.output.iter_mut()) {
+            let (_mod_mag, mod_ang) = mod_in.to_polar();
+
+            let est_mod_freq = crate::math::clean_angle_radians(mod_ang - self.last_mod_phase);
+
+            let mod_f_scale = 0.02 * (mod_in.re * self.mod_mag_scale);
+
+            self.phase += 0.02 * self.f_mul / self.f_div; // main accumulator
+            self.phase += est_mod_freq * self.mod_ang_scale; // PM (previously differentiated)
+            self.phase += mod_f_scale; // FM
+            self.phase %= TAU;
+
+            *out = QuadioSample::from_polar(1.0, self.phase);
+
+            self.last_mod_phase = mod_ang;
         }
     }
 }
@@ -548,27 +553,4 @@ impl QuadioNode for PhasorNode {
         ui.monospace("MOD ANG SCL");
         ui.add(egui::Slider::new(&mut self.mod_ang_scale, 0.0..=32.0).logarithmic(true));
     }
-
-    fn process(&mut self, _ctx: &AudioContext, inputs: &[&[QuadioSample]], outputs: &mut [&mut [QuadioSample]]) {
-        for (mod_in, out) in inputs[0].iter().zip(outputs[0].iter_mut()) {
-            let (_mod_mag, mod_ang) = mod_in.to_polar();
-
-            let est_mod_freq = crate::math::clean_angle_radians(mod_ang - self.last_mod_phase);
-
-            let mod_f_scale = 0.02 * (mod_in.re * self.mod_mag_scale);
-
-            self.phase += 0.02 * self.f_mul / self.f_div; // main accumulator
-            self.phase += est_mod_freq * self.mod_ang_scale; // PM (previously differentiated)
-            self.phase += mod_f_scale; // FM
-            self.phase %= TAU;
-
-            *out = QuadioSample::from_polar(
-                1.0,
-                self.phase
-            );
-
-            self.last_mod_phase = mod_ang;
-        }
-    }
 }
-*/
